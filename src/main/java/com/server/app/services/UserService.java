@@ -1,5 +1,8 @@
 package com.server.app.services;
 
+import com.server.app.dto.auth.LoginDto;
+import com.server.app.dto.auth.UpdatePasswordDto;
+import com.server.app.exceptions.UnauthorizedException;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -110,5 +113,55 @@ public class UserService {
         throw new ConfictException("El correo electrónico ya está en uso");
       }
     });
+  }
+
+  @Transactional
+  public User login(LoginDto dto) {
+    User user = userRepository.findUserByUsername(dto.getUsername())
+            .orElseThrow(() -> new UnauthorizedException("Credenciales inválidas"));
+
+    if (user.isBlocked()) {
+      throw new UnauthorizedException("Your account has been blocked");
+    }
+
+    if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+      throw new UnauthorizedException("Credenciales inválidas");
+    }
+
+    return user;
+  }
+
+  @Transactional
+  public User signUp(UserCreateDto dto) {
+    if (dto.getRole() == null) {
+      dto.setRole(2L); // USER por defecto
+    }
+
+    return create(dto);
+  }
+
+  @Transactional
+  public User updateProfile(int userId, UserUpdateDto dto) {
+    dto.setRole(null);
+    dto.setPassword(null);
+    dto.setBlocked(null);
+
+    return updateUser(userId, dto);
+  }
+
+  @Transactional
+  public User updatePassword(int userId, UpdatePasswordDto dto) {
+    User user = findById(userId);
+
+    if (!passwordEncoder.matches(dto.getOldpassword(), user.getPassword())) {
+      throw new UnauthorizedException("La contraseña actual es incorrecta");
+    }
+
+    if (!dto.getNewpassword().equals(dto.getConfirmpassword())) {
+      throw new ConfictException("La confirmación de contraseña no coincide");
+    }
+
+    user.setPassword(passwordEncoder.encode(dto.getNewpassword()));
+    return userRepository.save(user);
   }
 }
